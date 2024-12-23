@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -96,6 +97,7 @@ namespace TPP_lab
             
         }
 
+
         public static double CalculateSumParallel(int n)
         {
             double[] A = new double[n];
@@ -124,7 +126,7 @@ namespace TPP_lab
             return sum;
         }
 
-        public static double CalculateSumSingleThread(int n)
+        /*public static double CalculateSumSingleThread(int n)
         {
             double[] A = new double[n];
             double[] B = new double[n];
@@ -149,7 +151,7 @@ namespace TPP_lab
             Console.WriteLine($"Время выполнения (однопоточно): {stopwatch.ElapsedMilliseconds} ms");
 
             return sum;
-        }
+        }*/
 
         public static double CalculateSumWithAtomic(int n)
         {
@@ -208,6 +210,118 @@ namespace TPP_lab
 
             stopwatch.Stop();
             Console.WriteLine($"Время выполнения (critical): {stopwatch.ElapsedMilliseconds} ms");
+
+            return sum;
+        }
+
+        public static double CalculateSumParallelWithBarrier(int n)
+        {
+            double[] A = new double[n];
+            double[] B = new double[n];
+            double[] C = new double[n];
+
+            // Инициализация массивов
+            for (int i = 0; i < n; i++)
+            {
+                A[i] = i * 0.5;
+                B[i] = i * 0.3;
+            }
+
+            double sum = 0;
+
+            // Количество потоков равно количеству логических процессоров
+            int threadCount = Environment.ProcessorCount;
+
+            // Создаем барьер с количеством участников, равным числу потоков
+            Barrier barrier = new Barrier(threadCount,
+                b => Console.WriteLine($"Все потоки завершили фазу {b.CurrentPhaseNumber}."));
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            // Распределяем задачи между потоками
+            Parallel.For(0, threadCount, threadIndex =>
+            {
+                int chunkSize = n / threadCount;
+                int start = threadIndex * chunkSize;
+                int end = (threadIndex == threadCount - 1) ? n : start + chunkSize; // Последний поток обрабатывает остаток
+
+                double localSum = 0;
+
+                for (int i = start; i < end; i++)
+                {
+                    C[i] = Math.Sin(A[i] + B[i]);
+                    localSum += C[i];
+                }
+
+                // Синхронизация между потоками
+                barrier.SignalAndWait();
+
+                lock (C) // Безопасное добавление результата
+                {
+                    sum += localSum;
+                }
+            });
+
+            stopwatch.Stop();
+            Console.WriteLine($"Время выполнения (многопоточно с барьером): {stopwatch.ElapsedMilliseconds} ms");
+
+            return sum;
+        }
+
+
+
+        public static double CalculateSumSingleThread(int n)
+        {
+            double[] A = new double[n];
+            double[] B = new double[n];
+            double[] C = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                A[i] = i * 0.5;
+                B[i] = i * 0.3;
+            }
+
+            double sum = 0;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            for (int i = 0; i < n; i++)
+            {
+                C[i] = Math.Sin(A[i] + B[i]);
+                sum += C[i];
+            }
+
+            stopwatch.Stop();
+            Console.WriteLine($"Время выполнения (однопоточно): {stopwatch.ElapsedMilliseconds} ms");
+
+            return sum;
+        }
+
+
+        public static double CalculateSumParallelWithoutBarrier(int n)
+        {
+            double[] A = new double[n];
+            double[] B = new double[n];
+            double[] C = new double[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                A[i] = i * 0.5;
+                B[i] = i * 0.3;
+            }
+
+            double sum = 0;
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            Parallel.For(0, n, () => 0.0, (i, loopState, localSum) =>
+            {
+                C[i] = Math.Sin(A[i] + B[i]);
+                return localSum + C[i];
+            },
+            localSum => { lock (C) sum += localSum; });
+
+            stopwatch.Stop();
+            Console.WriteLine($"Время выполнения (многопоточно без барьера): {stopwatch.ElapsedMilliseconds} ms");
 
             return sum;
         }
